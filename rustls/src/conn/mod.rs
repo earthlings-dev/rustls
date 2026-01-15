@@ -6,6 +6,7 @@ use core::ops::{Deref, DerefMut};
 use std::io;
 
 use kernel::KernelConnection;
+use private::ExposeCommon as _;
 
 #[cfg(feature = "std")]
 use crate::common_state::Input;
@@ -1021,11 +1022,11 @@ impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
 
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State>, Error>,
-    pub(crate) side: Side,
+    pub(crate) side: Side::Data,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State>, side: Side) -> Self {
+    pub(crate) fn new(state: Box<dyn State>, side: Side::Data) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -1084,7 +1085,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             }
 
             let hs_aligned = self.side.recv.hs_deframer.aligned();
-            match process_main_protocol(
+            match process_main_protocol::<Side>(
                 msg,
                 hs_aligned,
                 state,
@@ -1202,9 +1203,13 @@ pub trait SideData: private::SideData {}
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait SideData:
-        Output + Debug + Deref<Target = CommonState> + DerefMut
-    {
+    pub(crate) trait SideData: Debug {
+        /// Data storage type.
+        type Data: Debug + Output + Deref<Target = CommonState> + DerefMut + ExposeCommon;
+    }
+
+    pub(crate) trait ExposeCommon {
+        #[doc(hidden)]
         fn into_common(self) -> CommonState;
     }
 }

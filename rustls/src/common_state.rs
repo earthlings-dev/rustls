@@ -36,7 +36,7 @@ pub(crate) fn process_main_protocol<Data: SideData>(
     state: Box<dyn State>,
     plaintext_locator: &Locator,
     received_plaintext: &mut Option<UnborrowedPayload>,
-    data: &mut Data,
+    data: &mut Data::Data,
 ) -> Result<Box<dyn State>, Error> {
     // Drop CCS messages during handshake in TLS1.3
     if msg.typ == ContentType::ChangeCipherSpec && data.recv.drop_tls13_ccs(&msg)? {
