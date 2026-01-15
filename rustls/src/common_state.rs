@@ -6,8 +6,7 @@ use core::ops::{Deref, DerefMut, Range};
 use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
-use crate::conn::Exporter;
-use crate::conn::kernel::KernelState;
+use crate::conn::{Exporter, StateMachine};
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
     Decrypted, DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter,
@@ -16,7 +15,7 @@ use crate::crypto::cipher::{
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::{
@@ -24,7 +23,7 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeDeframer, HandshakeMessagePayload, Locator, Message,
     MessageFragmenter, MessagePayload,
 };
-use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
+use crate::suites::SupportedCipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTraffic;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
@@ -33,11 +32,11 @@ use crate::{SideData, quic};
 pub(crate) fn process_main_protocol<Data: SideData>(
     msg: EncodedMessage<&'_ [u8]>,
     aligned_handshake: Option<HandshakeAlignedProof>,
-    state: Box<dyn State>,
+    state: Data::StateMachine,
     plaintext_locator: &Locator,
     received_plaintext: &mut Option<UnborrowedPayload>,
     data: &mut Data::Data,
-) -> Result<Box<dyn State>, Error> {
+) -> Result<Data::StateMachine, Error> {
     // Drop CCS messages during handshake in TLS1.3
     if msg.typ == ContentType::ChangeCipherSpec && data.recv.drop_tls13_ccs(&msg)? {
         trace!("Dropping CCS");
@@ -1065,31 +1064,6 @@ pub enum HandshakeKind {
     /// is unacceptable for several reasons, but this does not prevent the client
     /// from resuming.
     ResumedWithHelloRetryRequest,
-}
-
-pub(crate) trait State: Send + Sync {
-    fn handle<'m>(
-        self: Box<Self>,
-        input: Input<'m>,
-        output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>;
-
-    fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-
-    fn handle_decrypt_error(&self) {}
-
-    #[cfg_attr(not(feature = "std"), expect(dead_code))]
-    fn set_resumption_data(&mut self, _resumption_data: &[u8]) -> Result<(), Error> {
-        Err(ApiMisuse::ResumptionDataProvidedTooLate.into())
-    }
-
-    fn into_external_state(
-        self: Box<Self>,
-    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
 }
 
 struct CaptureAppData<'a> {
