@@ -50,9 +50,6 @@ pub(crate) mod persist;
 mod handshake_test;
 
 #[cfg(test)]
-mod message_test;
-
-#[cfg(test)]
 mod tests {
     use super::codec::Reader;
     use super::message::Message;
