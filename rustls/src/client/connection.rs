@@ -150,6 +150,7 @@ mod buffered {
                 .check_write(data.len())
                 .map(|sz| {
                     self.inner
+                        .send
                         .send_early_plaintext(&data[..sz])
                 })
         }
@@ -270,7 +271,9 @@ impl ConnectionCore<ClientConnectionData> {
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client, proto);
-        common_state.set_max_fragment_size(config.max_fragment_size)?;
+        common_state
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
         common_state.fips = config.fips();
         let mut data = ClientConnectionData::new(common_state);
 
@@ -425,6 +428,7 @@ impl MayEncryptEarlyData<'_> {
         self.conn
             .core
             .side
+            .send
             .write_plaintext(early_data[..allowed].into(), outgoing_tls)
             .map_err(|e| e.into())
     }
