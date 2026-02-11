@@ -8,16 +8,15 @@ publish = false
 default = ["aws-lc-rs", "brotli", "log", "ring", "zlib"]
 aws-lc-rs = ["dep:rustls-aws-lc-rs"]
 brotli = ["rustls/brotli"]
-fips = ["rustls-aws-lc-rs/fips"]
 log = ["rustls/log", "rustls-util/log"]
 ring = ["dep:rustls-ring"]
 zlib = ["rustls/zlib"]
 
 [dependencies]
-rustls = { path = "../rustls", default-features = false, features = ["webpki"] }
-rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["std"], optional = true }
-rustls-ring = { path = "../rustls-ring", optional = true }
-rustls-util = { path = "../rustls-util", default-features = false }
+rustls = { workspace = true, default-features = false, features = ["webpki"] }
+rustls-aws-lc-rs = { workspace = true, features = ["std"], optional = true }
+rustls-ring = { workspace = true, optional = true }
+rustls-util = { workspace = true, default-features = false }
 
 [dev-dependencies]
 env_logger = { workspace = true }

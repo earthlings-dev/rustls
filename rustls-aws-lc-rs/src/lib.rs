@@ -73,19 +73,8 @@ pub use verify::{
     RSA_PSS_2048_8192_SHA256_LEGACY_KEY, RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
 };
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
+#[cfg(feature = "unstable")]
 pub use verify::{ML_DSA_44, ML_DSA_65, ML_DSA_87};
-
-/// A `CryptoProvider` backed by aws-lc-rs that uses FIPS140-3-approved cryptography.
-///
-/// Using this constant expresses in your code that you require FIPS-approved cryptography, and
-/// will not compile if you make a mistake with cargo features.
-///
-/// See our [FIPS documentation][fips] for more detail.
-///
-/// [fips]: https://docs.rs/rustls/latest/rustls/manual/_06_fips/index.html
-#[cfg(feature = "fips")]
-pub const DEFAULT_FIPS_PROVIDER: CryptoProvider = DEFAULT_PROVIDER;
 
 /// The default `CryptoProvider` backed by aws-lc-rs.
 pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
@@ -208,11 +197,9 @@ const SIX_HOURS: Duration = Duration::from_secs(6 * 60 * 60);
 pub static DEFAULT_TLS12_CIPHER_SUITES: &[&Tls12CipherSuite] = &[
     tls12::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     tls12::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-    #[cfg(not(feature = "fips"))]
     tls12::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
     tls12::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
     tls12::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-    #[cfg(not(feature = "fips"))]
     tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 ];
 
@@ -223,7 +210,6 @@ pub static DEFAULT_TLS12_CIPHER_SUITES: &[&Tls12CipherSuite] = &[
 pub static DEFAULT_TLS13_CIPHER_SUITES: &[&Tls13CipherSuite] = &[
     tls13::TLS13_AES_128_GCM_SHA256,
     tls13::TLS13_AES_256_GCM_SHA384,
-    #[cfg(not(feature = "fips"))]
     tls13::TLS13_CHACHA20_POLY1305_SHA256,
 ];
 
@@ -338,7 +324,6 @@ pub mod kx_group {
 /// in hybrid with X25519.
 pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     kx_group::X25519MLKEM768,
-    #[cfg(not(feature = "fips"))]
     kx_group::X25519,
     kx_group::SECP256R1,
     kx_group::SECP384R1,
@@ -387,25 +372,6 @@ const MAX_FRAGMENT_LEN: usize = 16384;
 mod tests {
     use std::collections::HashSet;
 
-    #[cfg(feature = "fips")]
-    use pki_types::FipsStatus;
-
-    #[cfg(feature = "fips")]
-    #[test]
-    fn default_suites_are_fips() {
-        assert!(
-            super::DEFAULT_TLS12_CIPHER_SUITES
-                .iter()
-                .all(|scs| !matches!(scs.fips(), FipsStatus::Unvalidated))
-        );
-        assert!(
-            super::DEFAULT_TLS13_CIPHER_SUITES
-                .iter()
-                .all(|scs| !matches!(scs.fips(), FipsStatus::Unvalidated))
-        );
-    }
-
-    #[cfg(not(feature = "fips"))]
     #[test]
     fn default_suites() {
         assert_eq!(

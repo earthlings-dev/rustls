@@ -600,10 +600,6 @@ impl Options {
             "-install-one-cert-compression-alg" => {
                 self.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
             }
-            #[cfg(feature = "fips")]
-            "-fips-202205" if self.selected_provider == SelectedProvider::AwsLcRsFips => {
-                self.provider = rustls_aws_lc_rs::DEFAULT_FIPS_PROVIDER.clone();
-            }
             "-fips-202205" => {
                 println!("Not a FIPS build");
                 process::exit(BOGO_NACK);
@@ -811,7 +807,7 @@ impl Credential {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum SelectedProvider {
     AwsLcRs,
-    #[cfg_attr(not(feature = "fips"), allow(dead_code))]
+    #[allow(dead_code)]
     AwsLcRsFips,
     Ring,
 }
@@ -823,8 +819,6 @@ impl SelectedProvider {
             .as_deref()
         {
             None | Some("aws-lc-rs") => Self::AwsLcRs,
-            #[cfg(feature = "fips")]
-            Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
             Some("ring") => Self::Ring,
             Some(other) => panic!("unrecognized value for BOGO_SHIM_PROVIDER: {other:?}"),
         }

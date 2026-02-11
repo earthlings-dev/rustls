@@ -2,8 +2,8 @@ use aws_lc_rs::signature;
 use pki_types::{
     AlgorithmIdentifier, FipsStatus, InvalidSignature, SignatureVerificationAlgorithm, alg_id,
 };
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
-use unstable;
+#[cfg(feature = "unstable")]
+use aws_lc_rs::unstable;
 
 // nb. aws-lc-rs has an API that is broadly compatible with *ring*,
 // so this is very similar to ring_algs.rs.
@@ -32,11 +32,11 @@ pub static ALL_VERIFICATION_ALGS: &[&dyn SignatureVerificationAlgorithm] = &[
     RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-    #[cfg(all(feature = "unstable", not(feature = "fips")))]
+    #[cfg(feature = "unstable")]
     ML_DSA_44,
-    #[cfg(all(feature = "unstable", not(feature = "fips")))]
+    #[cfg(feature = "unstable")]
     ML_DSA_65,
-    #[cfg(all(feature = "unstable", not(feature = "fips")))]
+    #[cfg(feature = "unstable")]
     ML_DSA_87,
 ];
 
@@ -95,7 +95,7 @@ impl SignatureVerificationAlgorithm for AwsLcRsAlgorithm {
 }
 
 /// ML-DSA signatures using the [4, 4] matrix (security strength category 2).
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
+#[cfg(feature = "unstable")]
 pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_44,
     signature_alg_id: alg_id::ML_DSA_44,
@@ -105,7 +105,7 @@ pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
 };
 
 /// ML-DSA signatures using the [6, 5] matrix (security strength category 3).
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
+#[cfg(feature = "unstable")]
 pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_65,
     signature_alg_id: alg_id::ML_DSA_65,
@@ -115,7 +115,7 @@ pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
 };
 
 /// ML-DSA signatures using the [8. 7] matrix (security strength category 5).
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
+#[cfg(feature = "unstable")]
 pub static ML_DSA_87: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_87,
     signature_alg_id: alg_id::ML_DSA_87,

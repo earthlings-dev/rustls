@@ -7,7 +7,7 @@ description = "Rustls connectivity based integration tests."
 publish = false
 
 [dependencies]
-rustls = { path = "../rustls", features = ["log"] }
+rustls = { workspace = true, features = ["log"] }
 
 [dev-dependencies]
 regex = { workspace = true }

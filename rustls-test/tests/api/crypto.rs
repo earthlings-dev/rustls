@@ -188,11 +188,9 @@ fn test_secret_extraction_enabled() {
     for suite in [
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_128_GCM_SHA256),
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_256_GCM_SHA384),
-        #[cfg(not(feature = "fips"))]
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_CHACHA20_POLY1305_SHA256),
         SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256),
         SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384),
-        #[cfg(not(feature = "fips"))]
         SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256),
     ] {
         println!("Testing suite {:?}", suite.suite().as_str());

@@ -77,12 +77,14 @@ itertools = "0.14"
 log = { version = "0.4.8" }
 macro_rules_attribute = "0.2"
 mio = { version = "1", features = ["net", "os-poll"] }
+nix = { version = "0.31", default-features = false }
 num-bigint = "0.4.4"
 once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
 openssl = "0.10"
 p256 = { version = "0.13.2", default-features = false, features = ["alloc", "ecdsa", "pkcs8"] }
 pkcs8 = "0.10.2"
 pki-types = { package = "rustls-pki-types", version = "1.14", features = ["alloc"] }
+provider-example = { package = "rustls-provider-example", path = "provider-example" }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rayon = "1.7"
 rcgen = { version = "0.14.4", features = ["pem", "aws_lc_rs"], default-features = false }
@@ -90,9 +92,13 @@ regex = "1"
 ring = "0.17"
 rsa = { version = "0.9", features = ["sha2"], default-features = false }
 rustc-hash = "2"
+rustls = { path = "rustls", version = "0.24.0-dev.0" }
+rustls-aws-lc-rs = { path = "rustls-aws-lc-rs" }
 rustls-graviola = { version = "0.3" }
-rustls-test = { path = "rustls-test/", default-features = false }
 rustls-fuzzing-provider = { path = "rustls-fuzzing-provider/" }
+rustls-ring = { path = "rustls-ring" }
+rustls-test = { path = "rustls-test/", default-features = false }
+rustls-util = { path = "rustls-util" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = { version = "0.10", default-features = false }
@@ -153,3 +159,15 @@ unused_qualifications = "warn"
 # against the latest _published_ copy.
 [patch.crates-io]
 rustls = { path = "rustls" }
+anyhow = { git = "ssh://git@github.com/earthlings-dev/anyhow" }
+aws-lc-rs = { git = "ssh://git@github.com/earthlings-dev/aws-lc-rs" }
+clap = { git = "ssh://git@github.com/earthlings-dev/clap" }
+rand_core = { git = "ssh://git@github.com/earthlings-dev/rand_core" }
+rayon = { git = "ssh://git@github.com/earthlings-dev/rayon-rs" }
+rsa = { git = "ssh://git@github.com/earthlings-dev/RSA" }
+rustls-pki-types = { git = "ssh://git@github.com/earthlings-dev/pki-types" }
+rustls-webpki = { git = "ssh://git@github.com/earthlings-dev/rustls-webpki" }
+serde = { git = "ssh://git@github.com/earthlings-dev/serde" }
+serde_core = { git = "ssh://git@github.com/earthlings-dev/serde" }
+serde_json = { git = "ssh://git@github.com/earthlings-dev/json" }
+tokio = { git = "ssh://git@github.com/earthlings-dev/tokio" }

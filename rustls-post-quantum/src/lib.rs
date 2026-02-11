@@ -11,17 +11,17 @@
 //! whether the ML-KEM key exchange is preferred over non-post-quantum key exchanges.
 
 #[cfg(feature = "aws-lc-rs-unstable")]
-use rustls::SignatureScheme;
+use rustls::crypto::SignatureScheme;
 use rustls::crypto::CryptoProvider;
 #[cfg(feature = "aws-lc-rs-unstable")]
 use rustls::crypto::WebPkiSupportedAlgorithms;
-pub use rustls::crypto::aws_lc_rs::kx_group::{MLKEM768, X25519MLKEM768};
+pub use rustls_aws_lc_rs::kx_group::{MLKEM768, X25519MLKEM768};
 #[cfg(feature = "aws-lc-rs-unstable")]
 use webpki::aws_lc_rs as webpki_algs;
 
 pub fn provider() -> CryptoProvider {
     #[cfg_attr(not(feature = "aws-lc-rs-unstable"), allow(unused_mut))]
-    let mut provider = rustls::crypto::aws_lc_rs::default_provider();
+    let mut provider = rustls_aws_lc_rs::DEFAULT_PROVIDER;
     #[cfg(feature = "aws-lc-rs-unstable")]
     {
         provider.signature_verification_algorithms = SUPPORTED_SIG_ALGS;
@@ -41,10 +41,9 @@ mod key_provider {
         PqdsaSigningAlgorithm,
     };
     use rustls::crypto::KeyProvider;
-    use rustls::crypto::aws_lc_rs::sign;
-    use rustls::pki_types::{AlgorithmIdentifier, PrivateKeyDer, SubjectPublicKeyInfoDer, alg_id};
-    use rustls::sign::{Signer, SigningKey, public_key_to_spki};
-    use rustls::{Error, SignatureAlgorithm, SignatureScheme};
+    use rustls::pki_types::{AlgorithmIdentifier, FipsStatus, PrivateKeyDer, SubjectPublicKeyInfoDer, alg_id};
+    use rustls::crypto::{Signer, SigningKey, SignatureScheme, public_key_to_spki};
+    use rustls::Error;
 
     #[derive(Debug)]
     pub(super) struct PqAwsLcRs;
@@ -53,13 +52,13 @@ mod key_provider {
         fn load_private_key(
             &self,
             key_der: PrivateKeyDer<'static>,
-        ) -> Result<Arc<dyn SigningKey>, Error> {
+        ) -> Result<Box<dyn SigningKey>, Error> {
             // TODO: support `PqdsaKeyPair::from_raw_private_key()`?
             if let PrivateKeyDer::Pkcs8(pkcs8) = &key_der {
                 for kind in PqdsaKeyKind::iter() {
                     match PqdsaKeyPair::from_pkcs8(kind.to_alg(), pkcs8.secret_pkcs8_der()) {
                         Ok(key_pair) => {
-                            return Ok(Arc::new(PqdsaSigningKey {
+                            return Ok(Box::new(PqdsaSigningKey {
                                 kind,
                                 inner: Arc::new(key_pair),
                             }));
@@ -69,7 +68,7 @@ mod key_provider {
                 }
             }
 
-            match sign::any_supported_type(&key_der) {
+            match rustls_aws_lc_rs::DEFAULT_KEY_PROVIDER.load_private_key(key_der) {
                 Ok(key) => Ok(key),
                 Err(_) => Err(Error::General(
                     "failed to parse private key as ML-DSA, RSA, ECDSA, or EdDSA".into(),
@@ -77,8 +76,8 @@ mod key_provider {
             }
         }
 
-        fn fips(&self) -> bool {
-            false
+        fn fips(&self) -> FipsStatus {
+            FipsStatus::Unvalidated
         }
     }
 
@@ -105,12 +104,6 @@ mod key_provider {
                 self.inner.public_key(),
             ))
         }
-
-        // [`SignatureAlgorithm`] is for TLS 1.2, for which ML-DSA is not specified.
-        // Pick a "Reserved for Private Use" value.
-        fn algorithm(&self) -> SignatureAlgorithm {
-            SignatureAlgorithm::Unknown(255)
-        }
     }
 
     impl Debug for PqdsaSigningKey {
@@ -127,7 +120,7 @@ mod key_provider {
     }
 
     impl Signer for PqdsaSigner {
-        fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
+        fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error> {
             let expected_sig_len = self.key.algorithm().signature_len();
             let mut sig = vec![0; expected_sig_len];
             let actual_sig_len = self
@@ -283,17 +276,17 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
 
 #[cfg(all(test, feature = "aws-lc-rs-unstable"))]
 mod tests {
-    use core::ops::DerefMut;
     use std::io;
     use std::sync::Arc;
 
     use rcgen::{
-        CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
+        CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair,
+        KeyUsagePurpose,
     };
+    use rustls::crypto::Identity;
     use rustls::pki_types::PrivateKeyDer;
     use rustls::{
-        ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
-        ServerConnection, SideData,
+        ClientConfig, ClientConnection, Connection, RootCertStore, ServerConfig, ServerConnection,
     };
 
     #[test]
@@ -310,67 +303,58 @@ mod tests {
 
         let ee_key = KeyPair::generate_for(&rcgen::PKCS_ML_DSA_87).unwrap();
         let ee_params = CertificateParams::new(vec!["localhost".into()]).unwrap();
-        let ee_cert = ee_params
-            .signed_by(&ee_key, &issuer)
-            .unwrap();
+        let ee_cert = ee_params.signed_by(&ee_key, &issuer).unwrap();
 
         let provider = Arc::new(super::provider());
-        let server_config = ServerConfig::builder_with_provider(provider.clone())
-            .with_safe_default_protocol_versions()
-            .unwrap()
+        let identity = Arc::new(
+            Identity::from_cert_chain(vec![ee_cert.der().clone(), issuer.der().clone()]).unwrap(),
+        );
+        let server_config = ServerConfig::builder(provider.clone())
             .with_no_client_auth()
             .with_single_cert(
-                vec![ee_cert.der().clone()],
+                identity,
                 PrivateKeyDer::try_from(ee_key.serialize_der()).unwrap(),
             )
             .unwrap();
 
         let mut roots = RootCertStore::empty();
         roots.add(issuer.der().clone()).unwrap();
-        let client_config = ClientConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .unwrap()
+        let client_config = ClientConfig::builder(provider)
             .with_root_certificates(roots)
-            .with_no_client_auth();
+            .with_no_client_auth()
+            .unwrap();
 
-        let mut client =
-            ClientConnection::new(Arc::new(client_config), "localhost".try_into().unwrap())
-                .unwrap();
+        let client_config = Arc::new(client_config);
+        let mut client = client_config
+            .connect("localhost".try_into().unwrap())
+            .build()
+            .unwrap();
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
         do_handshake(&mut client, &mut server);
     }
 
-    // Copied from rustls while rustls-post-quantum depends on an older rustls.
-    fn do_handshake(
-        client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-        server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    ) -> (usize, usize) {
-        let (mut to_client, mut to_server) = (0, 0);
-        while server.is_handshaking() || client.is_handshaking() {
-            to_server += transfer(client, server);
+    fn do_handshake(client: &mut ClientConnection, server: &mut ServerConnection) {
+        loop {
+            transfer(client, server);
             server.process_new_packets().unwrap();
-            to_client += transfer(server, client);
+            transfer(server, client);
             client.process_new_packets().unwrap();
+            if !server.is_handshaking() && !client.is_handshaking() {
+                break;
+            }
         }
-        (to_server, to_client)
     }
 
-    // Copied from rustls-test while rustls-post-quantum depends on an older rustls.
-    fn transfer(
-        left: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-        right: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    ) -> usize {
+    fn transfer(left: &mut impl Connection, right: &mut impl Connection) {
         let mut buf = [0u8; 262144];
-        let mut total = 0;
 
         while left.wants_write() {
             let sz = {
                 let into_buf: &mut dyn io::Write = &mut &mut buf[..];
                 left.write_tls(into_buf).unwrap()
             };
-            total += sz;
             if sz == 0 {
-                return total;
+                return;
             }
 
             let mut offs = 0;
@@ -382,7 +366,5 @@ mod tests {
                 }
             }
         }
-
-        total
     }
 }

@@ -820,10 +820,6 @@ impl ResumptionParam {
 enum Provider {
     #[cfg(feature = "aws-lc-rs")]
     AwsLcRs,
-    #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
-    AwsLcRsFips,
-    #[cfg(feature = "graviola")]
-    Graviola,
     #[cfg(feature = "ring")]
     Ring,
     #[value(skip)]
@@ -835,10 +831,6 @@ impl Provider {
         match self {
             #[cfg(feature = "aws-lc-rs")]
             Self::AwsLcRs => rustls_aws_lc_rs::DEFAULT_PROVIDER,
-            #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
-            Self::AwsLcRsFips => rustls_aws_lc_rs::DEFAULT_FIPS_PROVIDER,
-            #[cfg(feature = "graviola")]
-            Self::Graviola => rustls_graviola::default_provider(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls_ring::DEFAULT_PROVIDER,
             Self::_None => unreachable!(),
@@ -865,12 +857,7 @@ impl Provider {
     }
 
     fn supports_key_type(&self, _key_type: KeyType) -> bool {
-        match self {
-            #[cfg(feature = "graviola")]
-            Self::Graviola => !matches!(_key_type, KeyType::Ed25519),
-            // all other providers support all key types
-            _ => true,
-        }
+        true
     }
 
     fn choose_default() -> Self {
@@ -880,11 +867,6 @@ impl Provider {
         #[cfg(feature = "aws-lc-rs")]
         available.push(Self::AwsLcRs);
 
-        #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
-        available.push(Self::AwsLcRsFips);
-
-        #[cfg(feature = "graviola")]
-        available.push(Self::Graviola);
 
         #[cfg(feature = "ring")]
         available.push(Self::Ring);

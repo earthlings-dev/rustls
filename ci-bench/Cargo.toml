@@ -14,9 +14,9 @@ clap = { workspace = true }
 itertools = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
-rustls = { path = "../rustls" }
-rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
-rustls-ring = { path = "../rustls-ring" }
+rustls = { workspace = true }
+rustls-aws-lc-rs = { workspace = true }
+rustls-ring = { workspace = true }
 rustls-test = { workspace = true, default-features = false }
 rustls-fuzzing-provider = { workspace = true }
 

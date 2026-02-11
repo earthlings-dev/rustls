@@ -7,15 +7,14 @@ publish = false
 [dependencies]
 base64 = { workspace = true }
 env_logger = { workspace = true }
-nix = { version = "0.31", default-features = false, features = ["signal"] }
-rustls = { path = "../rustls" }
-rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
-rustls-ring = { path = "../rustls-ring" }
+nix = { workspace = true, features = ["signal"] }
+rustls = { workspace = true }
+rustls-aws-lc-rs = { workspace = true }
+rustls-ring = { workspace = true }
 webpki = { workspace = true }
 
 [features]
 default = []
-fips = ["rustls-aws-lc-rs/fips"]
 
 [lints]
 workspace = true
