@@ -5,15 +5,14 @@ use alloc::vec::Vec;
 pub(crate) use client_hello::TLS12_HANDLER;
 use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
-use zeroize::Zeroizing;
+use zeroize::Zeroize;
 
 use super::config::ServerConfig;
-use super::connection::ServerConnectionData;
-use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue, hs};
+use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelState};
+use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
@@ -31,6 +30,7 @@ use crate::msgs::{
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::verify::{ClientIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
@@ -61,7 +61,7 @@ mod client_hello {
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             output: &mut dyn Output,
-        ) -> hs::NextStateOrError {
+        ) -> Result<Box<dyn State>, Error> {
             let mut randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
@@ -209,7 +209,7 @@ mod client_hello {
         using_ems: bool,
         suite: &'static Tls12CipherSuite,
         config: &ServerConfig,
-    ) -> (bool, Option<Tls12ServerSessionValue>) {
+    ) -> (bool, Option<Tls12ServerSessionValue<'static>>) {
         // First, check for a ticket that decrypts
         let (ticket, encoded) = match hello.session_ticket.as_ref() {
             Some(ClientSessionTicket::Offer(ticket)) => {
@@ -258,7 +258,7 @@ mod client_hello {
         }
 
         match session.extended_ms == using_ems || session.extended_ms && !using_ems {
-            true => (ticket, Some(session)),
+            true => (ticket, Some(session.into_owned())),
             false => (ticket, None),
         }
     }
@@ -274,9 +274,9 @@ mod client_hello {
         randoms: ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
         config: Arc<ServerConfig>,
-        resumedata: Tls12ServerSessionValue,
+        resumedata: Tls12ServerSessionValue<'static>,
         proof: HandshakeAlignedProof,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         debug!("Resuming connection");
 
         if resumedata.extended_ms && !using_ems {
@@ -314,7 +314,8 @@ mod client_hello {
             send_ticket,
         };
 
-        let secrets = ConnectionSecrets::new_resume(randoms, suite, &resumedata.master_secret);
+        let secrets =
+            ConnectionSecrets::new_resume(randoms, suite, resumedata.master_secret.as_ref());
         hs.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
@@ -377,7 +378,7 @@ mod client_hello {
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&CommonServerSessionValue>,
+        resumedata: Option<&CommonServerSessionValue<'_>>,
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
     ) -> Result<Tls12Extensions, Error> {
@@ -494,12 +495,12 @@ struct ExpectCertificate {
     server_kx: GroupAndKeyExchange,
 }
 
-impl State<ServerConnectionData> for ExpectCertificate {
+impl State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         self.hs.transcript.add_message(&message);
         let cert_chain = require_handshake_msg_move!(
             message,
@@ -556,12 +557,12 @@ struct ExpectClientKx {
     peer_identity: Option<Identity<'static>>,
 }
 
-impl State<ServerConnectionData> for ExpectClientKx {
+impl State for ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let client_kx = require_handshake_msg!(
             message,
             HandshakeType::ClientKeyExchange,
@@ -616,12 +617,12 @@ struct ExpectCertificateVerify {
     peer_identity: Identity<'static>,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let signature = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -669,8 +670,12 @@ struct ExpectCcs {
     resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
 }
 
-impl State<ServerConnectionData> for ExpectCcs {
-    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCcs {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
@@ -708,23 +713,38 @@ impl State<ServerConnectionData> for ExpectCcs {
 }
 
 #[derive(Debug)]
-pub(crate) struct Tls12ServerSessionValue {
-    common: CommonServerSessionValue,
-    master_secret: Zeroizing<[u8; 48]>,
+pub(crate) struct Tls12ServerSessionValue<'a> {
+    common: CommonServerSessionValue<'a>,
+    master_secret: ZeroizingCow<'a, 48>,
     extended_ms: bool,
 }
 
-impl Tls12ServerSessionValue {
-    fn new(common: CommonServerSessionValue, master_secret: &[u8; 48], extended_ms: bool) -> Self {
+impl<'a> Tls12ServerSessionValue<'a> {
+    fn new(
+        common: CommonServerSessionValue<'a>,
+        master_secret: &'a [u8; 48],
+        extended_ms: bool,
+    ) -> Self {
         Self {
             common,
-            master_secret: Zeroizing::new(*master_secret),
+            master_secret: ZeroizingCow::Borrowed(master_secret),
             extended_ms,
+        }
+    }
+
+    fn into_owned(self) -> Tls12ServerSessionValue<'static> {
+        Tls12ServerSessionValue {
+            common: self.common.into_owned(),
+            master_secret: ZeroizingCow::Owned(match self.master_secret {
+                ZeroizingCow::Borrowed(b) => *b,
+                ZeroizingCow::Owned(o) => o,
+            }),
+            extended_ms: self.extended_ms,
         }
     }
 }
 
-impl Codec<'_> for Tls12ServerSessionValue {
+impl Codec<'_> for Tls12ServerSessionValue<'_> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.common.encode(bytes);
         bytes.extend_from_slice(self.master_secret.as_ref());
@@ -734,15 +754,38 @@ impl Codec<'_> for Tls12ServerSessionValue {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             common: CommonServerSessionValue::read(r)?,
-            master_secret: Zeroizing::new(r.take_array("MasterSecret").copied()?),
+            master_secret: ZeroizingCow::Owned(r.take_array("MasterSecret").copied()?),
             extended_ms: matches!(u8::read(r)?, 1),
         })
     }
 }
 
-impl From<Tls12ServerSessionValue> for ServerSessionValue {
-    fn from(value: Tls12ServerSessionValue) -> Self {
+impl<'a> From<Tls12ServerSessionValue<'a>> for ServerSessionValue<'a> {
+    fn from(value: Tls12ServerSessionValue<'a>) -> Self {
         Self::Tls12(value)
+    }
+}
+
+#[derive(Debug)]
+enum ZeroizingCow<'a, const N: usize> {
+    Borrowed(&'a [u8; N]),
+    Owned([u8; N]),
+}
+
+impl<const N: usize> AsRef<[u8; N]> for ZeroizingCow<'_, N> {
+    fn as_ref(&self) -> &[u8; N] {
+        match self {
+            ZeroizingCow::Borrowed(b) => b,
+            ZeroizingCow::Owned(o) => o,
+        }
+    }
+}
+
+impl<const N: usize> Drop for ZeroizingCow<'_, N> {
+    fn drop(&mut self) {
+        if let ZeroizingCow::Owned(o) = self {
+            o.zeroize();
+        }
     }
 }
 
@@ -830,12 +873,12 @@ struct ExpectFinished {
     pending_encrypter: Option<Box<dyn MessageEncrypter>>,
 }
 
-impl State<ServerConnectionData> for ExpectFinished {
+impl State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let finished = require_handshake_msg!(
             input.message,
             HandshakeType::Finished,
@@ -961,12 +1004,12 @@ struct ExpectTraffic {
 
 impl ExpectTraffic {}
 
-impl State<ServerConnectionData> for ExpectTraffic {
+impl State for ExpectTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         match message.payload {
             MessagePayload::ApplicationData(payload) => {
                 output.emit(Event::ApplicationData(payload))
@@ -983,6 +1026,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
 
     fn into_external_state(
         mut self: Box<Self>,
+        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         match self.extracted_secrets.take() {
             Some(extracted_secrets) => Ok((extracted_secrets?, self)),
@@ -992,7 +1036,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
-    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
         Err(ApiMisuse::KeyUpdateNotAvailableForTls12.into())
     }
 

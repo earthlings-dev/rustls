@@ -20,6 +20,7 @@ concurrency:
 
 env:
   RUSTFLAGS: --deny warnings
+  AWS_LC_SYS_NO_JITTER_ENTROPY: 1
 
 jobs:
   build:
@@ -71,7 +72,7 @@ jobs:
         if: runner.os == 'MacOS'
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.6"
+          go-version: "1.26.0"
 
       - name: cargo build (debug; default features)
         run: cargo build --locked
@@ -187,7 +188,7 @@ jobs:
       - name: Install golang toolchain
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: false
 
       - name: Run test suite (ring)

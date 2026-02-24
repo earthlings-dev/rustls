@@ -9,7 +9,6 @@ use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
-use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer};
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
@@ -17,7 +16,8 @@ use crate::common_state::{
     Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelState};
+use crate::conn::kernel::KernelState;
+use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
 use crate::enums::{
@@ -79,7 +79,7 @@ mod client_hello {
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             output: &mut dyn Output,
-        ) -> hs::NextStateOrError {
+        ) -> Result<Box<dyn State>, Error> {
             let randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
@@ -406,7 +406,7 @@ mod client_hello {
         suite: &'static Tls13CipherSuite,
         protocol: Protocol,
         config: &ServerConfig,
-    ) -> Result<Option<(usize, Tls13ServerSessionValue)>, Error> {
+    ) -> Result<Option<(usize, Tls13ServerSessionValue<'static>)>, Error> {
         let Some(psk_offer) = &input.client_hello.preshared_key_offer else {
             return Ok(None);
         };
@@ -454,7 +454,7 @@ mod client_hello {
                 return Err(PeerMisbehaved::IncorrectBinder.into());
             }
 
-            return Ok(Some((i, session)));
+            return Ok(Some((i, session.into_owned())));
         }
 
         Ok(None)
@@ -489,7 +489,7 @@ mod client_hello {
         output: &mut dyn Output,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
-        resuming: Option<&(usize, Tls13ServerSessionValue)>,
+        resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
         proof: &HandshakeAlignedProof,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
@@ -607,7 +607,7 @@ mod client_hello {
     fn decide_if_early_data_allowed(
         output: &mut dyn Output,
         client_hello: &ClientHelloPayload,
-        resumedata: Option<&Tls13ServerSessionValue>,
+        resumedata: Option<&Tls13ServerSessionValue<'_>>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
         protocol: Protocol,
@@ -671,7 +671,7 @@ mod client_hello {
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&Tls13ServerSessionValue>,
+        resumedata: Option<&Tls13ServerSessionValue<'_>>,
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
     ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
@@ -833,12 +833,12 @@ struct ExpectAndSkipRejectedEarlyData {
     next: Box<hs::ExpectClientHello>,
 }
 
-impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
+impl State for ExpectAndSkipRejectedEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
          *  up to the configured max_early_data_size."
@@ -860,8 +860,12 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificateOrCompressedCertificate {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -902,7 +906,7 @@ struct ExpectCompressedCertificate {
 }
 
 impl ExpectCompressedCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         self.hs.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
             message,
@@ -956,7 +960,7 @@ struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         self.hs.transcript.add_message(&message);
         self.handle_certificate(require_handshake_msg_move!(
             message,
@@ -965,7 +969,10 @@ impl ExpectCertificate {
         )?)
     }
 
-    fn handle_certificate(mut self, certp: CertificatePayloadTls13<'_>) -> hs::NextStateOrError {
+    fn handle_certificate(
+        mut self,
+        certp: CertificatePayloadTls13<'_>,
+    ) -> Result<Box<dyn State>, Error> {
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
         if certp
@@ -1016,8 +1023,12 @@ impl ExpectCertificate {
     }
 }
 
-impl State<ServerConnectionData> for ExpectCertificate {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificate {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         self.handle_input(input)
     }
 }
@@ -1028,12 +1039,12 @@ struct ExpectCertificateVerify {
     peer_identity: Identity<'static>,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let signature = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -1072,12 +1083,12 @@ struct ExpectEarlyData {
     remaining_length: usize,
 }
 
-impl State<ServerConnectionData> for ExpectEarlyData {
+impl State for ExpectEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.remaining_length = match self
@@ -1117,17 +1128,20 @@ impl State<ServerConnectionData> for ExpectEarlyData {
 }
 
 #[derive(Debug)]
-pub(crate) struct Tls13ServerSessionValue {
-    common: CommonServerSessionValue,
-    secret: Zeroizing<SizedPayload<'static, u8>>,
+pub(crate) struct Tls13ServerSessionValue<'a> {
+    common: CommonServerSessionValue<'a>,
+    secret: ZeroizingCow<'a>,
     age_obfuscation_offset: u32,
 
     // not encoded vv
     freshness: Option<bool>,
 }
 
-impl Tls13ServerSessionValue {
-    fn from_ticket(id: &PresharedKeyIdentity, config: &ServerConfig) -> Option<Self> {
+impl<'a> Tls13ServerSessionValue<'a> {
+    fn from_ticket(
+        id: &PresharedKeyIdentity,
+        config: &ServerConfig,
+    ) -> Option<Tls13ServerSessionValue<'static>> {
         let plain = match config.ticketer.as_deref() {
             Some(ticketer) => ticketer.decrypt(id.identity.bytes())?,
             None => config
@@ -1135,22 +1149,35 @@ impl Tls13ServerSessionValue {
                 .take(ServerSessionKey::new(id.identity.bytes()))?,
         };
 
-        match ServerSessionValue::read_bytes(&plain).ok()? {
-            ServerSessionValue::Tls13(tls13) => Some(tls13),
-            _ => None,
-        }
+        let Ok(ServerSessionValue::Tls13(tls13)) = ServerSessionValue::read_bytes(&plain) else {
+            return None;
+        };
+
+        Some(tls13.into_owned())
     }
 
     pub(super) fn new(
-        common: CommonServerSessionValue,
-        secret: &[u8],
+        common: CommonServerSessionValue<'a>,
+        secret: &'a [u8],
         age_obfuscation_offset: u32,
     ) -> Self {
         Self {
             common,
-            secret: Zeroizing::new(secret.to_vec().into()),
+            secret: ZeroizingCow::Borrowed(SizedPayload::from(Payload::Borrowed(secret))),
             age_obfuscation_offset,
             freshness: None,
+        }
+    }
+
+    fn into_owned(self) -> Tls13ServerSessionValue<'static> {
+        Tls13ServerSessionValue {
+            common: self.common.into_owned(),
+            secret: ZeroizingCow::Owned(match self.secret {
+                ZeroizingCow::Borrowed(b) => Zeroizing::from(b.into_owned()),
+                ZeroizingCow::Owned(o) => o,
+            }),
+            age_obfuscation_offset: self.age_obfuscation_offset,
+            freshness: self.freshness,
         }
     }
 
@@ -1170,7 +1197,7 @@ impl Tls13ServerSessionValue {
     }
 }
 
-impl Codec<'_> for Tls13ServerSessionValue {
+impl<'a> Codec<'a> for Tls13ServerSessionValue<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.common.encode(bytes);
         self.secret.encode(bytes);
@@ -1178,19 +1205,47 @@ impl Codec<'_> for Tls13ServerSessionValue {
             .encode(bytes);
     }
 
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             common: CommonServerSessionValue::read(r)?,
-            secret: Zeroizing::new(SizedPayload::read(r)?.into_owned()),
+            secret: ZeroizingCow::read(r)?,
             age_obfuscation_offset: u32::read(r)?,
             freshness: None,
         })
     }
 }
 
-impl From<Tls13ServerSessionValue> for ServerSessionValue {
-    fn from(value: Tls13ServerSessionValue) -> Self {
+impl<'a> From<Tls13ServerSessionValue<'a>> for ServerSessionValue<'a> {
+    fn from(value: Tls13ServerSessionValue<'a>) -> Self {
         Self::Tls13(value)
+    }
+}
+
+#[derive(Debug)]
+enum ZeroizingCow<'a> {
+    Borrowed(SizedPayload<'a, u8>),
+    Owned(Zeroizing<SizedPayload<'static, u8>>),
+}
+
+impl<'a> ZeroizingCow<'a> {
+    fn bytes(&self) -> &[u8] {
+        match self {
+            ZeroizingCow::Borrowed(b) => b.bytes(),
+            ZeroizingCow::Owned(o) => o.bytes(),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for ZeroizingCow<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            ZeroizingCow::Borrowed(b) => b.encode(bytes),
+            ZeroizingCow::Owned(o) => o.encode(bytes),
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(ZeroizingCow::Borrowed(SizedPayload::read(r)?))
     }
 }
 
@@ -1273,12 +1328,12 @@ impl ExpectFinished {
     }
 }
 
-impl State<ServerConnectionData> for ExpectFinished {
+impl State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let finished = require_handshake_msg!(
             input.message,
             HandshakeType::Finished,
@@ -1321,21 +1376,21 @@ impl State<ServerConnectionData> for ExpectFinished {
         }
         flight.finish(output);
 
+        let (key_schedule_send, key_schedule_recv) = key_schedule_traffic.split();
+
         // Application data may now flow, even if we have client auth enabled.
         if let Some(identity) = self.peer_identity {
             output.emit(Event::PeerIdentity(identity));
         }
         output.emit(Event::Exporter(Box::new(exporter)));
+        output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
         output.emit(Event::StartTraffic);
-
-        let (key_schedule_send, key_schedule_recv) = key_schedule_traffic.split();
 
         Ok(match key_schedule_recv.protocol().is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
             false => Box::new(ExpectTraffic {
                 config: self.hs.config,
                 counters: TrafficTemperCounters::default(),
-                key_schedule_send,
                 key_schedule_recv,
                 _fin_verified: fin,
             }),
@@ -1356,7 +1411,6 @@ struct HandshakeState {
 // --- Process traffic ---
 struct ExpectTraffic {
     config: Arc<ServerConfig>,
-    key_schedule_send: KeyScheduleTrafficSend,
     key_schedule_recv: KeyScheduleTrafficReceive,
     counters: TrafficTemperCounters,
     _fin_verified: verify::FinishedMessageVerified,
@@ -1384,9 +1438,7 @@ impl ExpectTraffic {
 
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => {
-                output.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule_send))
-            }
+            KeyUpdateRequest::UpdateRequested => output.emit(Event::MaybeKeyUpdateRequest),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
@@ -1397,12 +1449,12 @@ impl ExpectTraffic {
     }
 }
 
-impl State<ServerConnectionData> for ExpectTraffic {
+impl State for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
@@ -1424,20 +1476,21 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn send_key_update_request(&mut self, output: &mut dyn Output) -> Result<(), Error> {
-        self.key_schedule_send
-            .request_key_update_and_update_encrypter(output)
-    }
-
     fn into_external_state(
         self: Box<Self>,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         if !self.config.enable_secret_extraction {
             return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
+        let Some(send_keys) = send_keys else {
+            return Err(Error::Unreachable(
+                "send_keys required for TLS1.3 into_external_state",
+            ));
+        };
         Ok((
             PartiallyExtractedSecrets {
-                tx: self.key_schedule_send.extract()?,
+                tx: send_keys.extract()?,
                 rx: self.key_schedule_recv.extract()?,
             },
             self,
@@ -1446,15 +1499,9 @@ impl State<ServerConnectionData> for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
-    fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        match dir {
-            Direction::Transmit => self
-                .key_schedule_send
-                .refresh_traffic_secret(),
-            Direction::Receive => self
-                .key_schedule_recv
-                .refresh_traffic_secret(),
-        }
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
+        self.key_schedule_recv
+            .refresh_traffic_secret()
     }
 
     fn handle_new_session_ticket(
@@ -1471,12 +1518,12 @@ struct ExpectQuicTraffic {
     _fin_verified: verify::FinishedMessageVerified,
 }
 
-impl State<ServerConnectionData> for ExpectQuicTraffic {
+impl State for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         // reject all messages
         Err(inappropriate_message(&message.payload, &[]))
     }
@@ -1484,7 +1531,7 @@ impl State<ServerConnectionData> for ExpectQuicTraffic {
 
 impl KernelState for ExpectQuicTraffic {
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
         Err(Error::Unreachable(
             "QUIC connections do not support key updates",
         ))
