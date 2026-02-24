@@ -153,7 +153,6 @@ dependencies = [
 [[package]]
 name = "anyhow"
 version = "1.0.101"
-source = "git+ssh://git@github.com/earthlings-dev/anyhow#3a900dfcd18a5019fed8bc1cfca64618a663a434"
 
 [[package]]
 name = "asn1"
@@ -241,7 +240,6 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 [[package]]
 name = "aws-lc-rs"
 version = "1.15.4"
-source = "git+ssh://git@github.com/earthlings-dev/aws-lc-rs#d0fb11c78398a4cf2964acf238080803fa24ca87"
 dependencies = [
  "aws-lc-sys",
  "untrusted",
@@ -251,7 +249,6 @@ dependencies = [
 [[package]]
 name = "aws-lc-sys"
 version = "0.37.1"
-source = "git+ssh://git@github.com/earthlings-dev/aws-lc-rs#d0fb11c78398a4cf2964acf238080803fa24ca87"
 dependencies = [
  "cc",
  "cmake",
@@ -494,7 +491,6 @@ dependencies = [
 [[package]]
 name = "clap"
 version = "4.5.58"
-source = "git+ssh://git@github.com/earthlings-dev/clap#86f63f180dd3754fe2ff86b9a1565777c7921bfc"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -503,7 +499,6 @@ dependencies = [
 [[package]]
 name = "clap_builder"
 version = "4.5.58"
-source = "git+ssh://git@github.com/earthlings-dev/clap#86f63f180dd3754fe2ff86b9a1565777c7921bfc"
 dependencies = [
  "anstream 1.0.0",
  "anstyle",
@@ -514,7 +509,6 @@ dependencies = [
 [[package]]
 name = "clap_derive"
 version = "4.5.55"
-source = "git+ssh://git@github.com/earthlings-dev/clap#86f63f180dd3754fe2ff86b9a1565777c7921bfc"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -525,7 +519,6 @@ dependencies = [
 [[package]]
 name = "clap_lex"
 version = "1.0.0"
-source = "git+ssh://git@github.com/earthlings-dev/clap#86f63f180dd3754fe2ff86b9a1565777c7921bfc"
 
 [[package]]
 name = "cmake"
@@ -2526,12 +2519,10 @@ dependencies = [
 [[package]]
 name = "rand_core"
 version = "0.10.0"
-source = "git+ssh://git@github.com/earthlings-dev/rand_core#9526dcf2b97f7a22fdaa62d4100777180f4c3ac4"
 
 [[package]]
 name = "rayon"
 version = "1.11.0"
-source = "git+ssh://git@github.com/earthlings-dev/rayon-rs#a219bc3b945cd090ef6c9aa04411fa71f7a07f1a"
 dependencies = [
  "either",
  "rayon-core",
@@ -2540,7 +2531,6 @@ dependencies = [
 [[package]]
 name = "rayon-core"
 version = "1.13.0"
-source = "git+ssh://git@github.com/earthlings-dev/rayon-rs#a219bc3b945cd090ef6c9aa04411fa71f7a07f1a"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
@@ -2811,7 +2801,6 @@ dependencies = [
 [[package]]
 name = "rustls-pki-types"
 version = "1.14.0"
-source = "git+ssh://git@github.com/earthlings-dev/pki-types#0d9d48fb3997c54a1a4ea4d2c5e9c22c65553389"
 dependencies = [
  "zeroize",
 ]
@@ -2976,18 +2965,25 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 [[package]]
 name = "serde"
 version = "1.0.228"
-source = "git+ssh://git@github.com/earthlings-dev/serde#6a4bbcaaf3cab03d3c865e035a3a1d45df8048b1"
 dependencies = [
  "serde_core",
- "serde_derive 1.0.228 (git+ssh://git@github.com/earthlings-dev/serde)",
+ "serde_derive 1.0.228",
 ]
 
 [[package]]
 name = "serde_core"
 version = "1.0.228"
-source = "git+ssh://git@github.com/earthlings-dev/serde#6a4bbcaaf3cab03d3c865e035a3a1d45df8048b1"
 dependencies = [
- "serde_derive 1.0.228 (git+ssh://git@github.com/earthlings-dev/serde)",
+ "serde_derive 1.0.228",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.228"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -3002,19 +2998,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_derive"
-version = "1.0.228"
-source = "git+ssh://git@github.com/earthlings-dev/serde#6a4bbcaaf3cab03d3c865e035a3a1d45df8048b1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "serde_json"
 version = "1.0.149"
-source = "git+ssh://git@github.com/earthlings-dev/json#d72b0902639362cbfc8f9ef9cd9860226be7c28a"
 dependencies = [
  "itoa",
  "memchr",
@@ -4134,14 +4119,11 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 [[patch.unused]]
 name = "rsa"
 version = "0.10.0-rc.15"
-source = "git+ssh://git@github.com/earthlings-dev/RSA#03ae88fdecf29f01e2cb1b141cc297595238828f"
 
 [[patch.unused]]
 name = "rustls-webpki"
 version = "0.104.0-alpha.4"
-source = "git+ssh://git@github.com/earthlings-dev/rustls-webpki#a9e304ed29af7e7e641fc5e81f8aa7418fe38fae"
 
 [[patch.unused]]
 name = "tokio"
 version = "1.49.0"
-source = "git+ssh://git@github.com/earthlings-dev/tokio#aae1fef21f4b8a3c6a9e3cebb5c0e7e8f5f4946a"

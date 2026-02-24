@@ -3,9 +3,11 @@ use std::sync::Arc;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use rustls::crypto::CryptoProvider;
-use rustls::crypto::kx::{ActiveKeyExchange, NamedGroup, SharedSecret, SupportedKxGroup, StartedKeyExchange};
-use rustls_aws_lc_rs::kx_group::X25519;
+use rustls::crypto::kx::{
+    ActiveKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+};
 use rustls::{ClientConfig, Connection, Error, RootCertStore};
+use rustls_aws_lc_rs::kx_group::X25519;
 use rustls_post_quantum::{MLKEM768, X25519MLKEM768};
 
 fn bench_client(c: &mut Criterion) {
@@ -28,7 +30,10 @@ fn bench_client(c: &mut Criterion) {
 }
 
 fn bench_server(c: &mut Criterion) {
-    let client_x25519mlkem768 = X25519MLKEM768.start().unwrap().into_single();
+    let client_x25519mlkem768 = X25519MLKEM768
+        .start()
+        .unwrap()
+        .into_single();
     let client_x25519 = X25519.start().unwrap().into_single();
     let client_mlkem768 = MLKEM768.start().unwrap().into_single();
 
@@ -72,23 +77,26 @@ fn bench_clienthello(c: &mut Criterion) {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     });
 
-    let config_x25519: Arc<ClientConfig> =
-        Arc::new(ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into())
+    let config_x25519: Arc<ClientConfig> = Arc::new(
+        ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into())
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
-            .unwrap());
+            .unwrap(),
+    );
 
-    let config_x25519mlkem768: Arc<ClientConfig> =
-        Arc::new(ClientConfig::builder(rustls_post_quantum::provider().into())
+    let config_x25519mlkem768: Arc<ClientConfig> = Arc::new(
+        ClientConfig::builder(rustls_post_quantum::provider().into())
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
-            .unwrap());
+            .unwrap(),
+    );
 
-    let config_x25519mlkem768_x25519: Arc<ClientConfig> =
-        Arc::new(ClientConfig::builder(separate_provider().into())
+    let config_x25519mlkem768_x25519: Arc<ClientConfig> = Arc::new(
+        ClientConfig::builder(separate_provider().into())
             .with_root_certificates(anchors)
             .with_no_client_auth()
-            .unwrap());
+            .unwrap(),
+    );
 
     println!("Clienthello lengths:");
     println!("  X25519 alone = {:?}", do_client_hello(&config_x25519));

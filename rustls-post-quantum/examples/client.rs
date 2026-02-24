@@ -29,7 +29,11 @@ fn main() {
 
     let config = Arc::new(config);
     let mut conn = config
-        .connect("pq.cloudflareresearch.com".try_into().unwrap())
+        .connect(
+            "pq.cloudflareresearch.com"
+                .try_into()
+                .unwrap(),
+        )
         .build()
         .unwrap();
     let mut sock = TcpStream::connect("pq.cloudflareresearch.com:443").unwrap();
@@ -47,7 +51,9 @@ fn main() {
         ciphersuite.suite()
     )
     .unwrap();
-    let kx_group = conn.negotiated_key_exchange_group().unwrap();
+    let kx_group = conn
+        .negotiated_key_exchange_group()
+        .unwrap();
     writeln!(
         &mut std::io::stderr(),
         "Current key exchange group: {kx_group:?}",

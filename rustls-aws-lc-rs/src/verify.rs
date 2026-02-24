@@ -1,9 +1,9 @@
 use aws_lc_rs::signature;
+#[cfg(feature = "unstable")]
+use aws_lc_rs::unstable;
 use pki_types::{
     AlgorithmIdentifier, FipsStatus, InvalidSignature, SignatureVerificationAlgorithm, alg_id,
 };
-#[cfg(feature = "unstable")]
-use aws_lc_rs::unstable;
 
 // nb. aws-lc-rs has an API that is broadly compatible with *ring*,
 // so this is very similar to ring_algs.rs.

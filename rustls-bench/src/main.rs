@@ -867,7 +867,6 @@ impl Provider {
         #[cfg(feature = "aws-lc-rs")]
         available.push(Self::AwsLcRs);
 
-
         #[cfg(feature = "ring")]
         available.push(Self::Ring);
 

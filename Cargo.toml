@@ -159,15 +159,15 @@ unused_qualifications = "warn"
 # against the latest _published_ copy.
 [patch.crates-io]
 rustls = { path = "rustls" }
-anyhow = { git = "ssh://git@github.com/earthlings-dev/anyhow" }
-aws-lc-rs = { git = "ssh://git@github.com/earthlings-dev/aws-lc-rs" }
-clap = { git = "ssh://git@github.com/earthlings-dev/clap" }
-rand_core = { git = "ssh://git@github.com/earthlings-dev/rand_core" }
-rayon = { git = "ssh://git@github.com/earthlings-dev/rayon-rs" }
-rsa = { git = "ssh://git@github.com/earthlings-dev/RSA" }
-rustls-pki-types = { git = "ssh://git@github.com/earthlings-dev/pki-types" }
-rustls-webpki = { git = "ssh://git@github.com/earthlings-dev/rustls-webpki" }
-serde = { git = "ssh://git@github.com/earthlings-dev/serde" }
-serde_core = { git = "ssh://git@github.com/earthlings-dev/serde" }
-serde_json = { git = "ssh://git@github.com/earthlings-dev/json" }
-tokio = { git = "ssh://git@github.com/earthlings-dev/tokio" }
+anyhow = { path = "../anyhow" }
+aws-lc-rs = { path = "../aws-lc-rs/aws-lc-rs" }
+clap = { path = "../clap" }
+rand_core = { path = "../rand_core" }
+rayon = { path = "../rayon-rs" }
+rsa = { path = "../RSA" }
+rustls-pki-types = { path = "../pki-types" }
+rustls-webpki = { path = "../rustls-webpki" }
+serde = { path = "../serde/serde" }
+serde_core = { path = "../serde/serde_core" }
+serde_json = { path = "../json" }
+tokio = { path = "../tokio/tokio" }

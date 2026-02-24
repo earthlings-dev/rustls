@@ -10,9 +10,9 @@
 //! In rustls 0.23.22 and later, you can use rustls' `prefer-post-quantum` feature to determine
 //! whether the ML-KEM key exchange is preferred over non-post-quantum key exchanges.
 
+use rustls::crypto::CryptoProvider;
 #[cfg(feature = "aws-lc-rs-unstable")]
 use rustls::crypto::SignatureScheme;
-use rustls::crypto::CryptoProvider;
 #[cfg(feature = "aws-lc-rs-unstable")]
 use rustls::crypto::WebPkiSupportedAlgorithms;
 pub use rustls_aws_lc_rs::kx_group::{MLKEM768, X25519MLKEM768};
@@ -40,10 +40,12 @@ mod key_provider {
         ML_DSA_44_SIGNING, ML_DSA_65_SIGNING, ML_DSA_87_SIGNING, PqdsaKeyPair,
         PqdsaSigningAlgorithm,
     };
-    use rustls::crypto::KeyProvider;
-    use rustls::pki_types::{AlgorithmIdentifier, FipsStatus, PrivateKeyDer, SubjectPublicKeyInfoDer, alg_id};
-    use rustls::crypto::{Signer, SigningKey, SignatureScheme, public_key_to_spki};
     use rustls::Error;
+    use rustls::crypto::KeyProvider;
+    use rustls::crypto::{SignatureScheme, Signer, SigningKey, public_key_to_spki};
+    use rustls::pki_types::{
+        AlgorithmIdentifier, FipsStatus, PrivateKeyDer, SubjectPublicKeyInfoDer, alg_id,
+    };
 
     #[derive(Debug)]
     pub(super) struct PqAwsLcRs;
@@ -280,8 +282,7 @@ mod tests {
     use std::sync::Arc;
 
     use rcgen::{
-        CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair,
-        KeyUsagePurpose,
+        CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
     };
     use rustls::crypto::Identity;
     use rustls::pki_types::PrivateKeyDer;
@@ -303,7 +304,9 @@ mod tests {
 
         let ee_key = KeyPair::generate_for(&rcgen::PKCS_ML_DSA_87).unwrap();
         let ee_params = CertificateParams::new(vec!["localhost".into()]).unwrap();
-        let ee_cert = ee_params.signed_by(&ee_key, &issuer).unwrap();
+        let ee_cert = ee_params
+            .signed_by(&ee_key, &issuer)
+            .unwrap();
 
         let provider = Arc::new(super::provider());
         let identity = Arc::new(
